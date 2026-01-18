@@ -1,10 +1,6 @@
-import { UserProvider } from '@auth0/nextjs-auth0/client';
-import NavBar from '@/components/NavBar';
-import '@/styles/globals.css';
-
 export const metadata = {
-  title: 'MCHacks',
-  description: 'MCHacks Project',
+  title: 'OpenSCAD to STL Viewer',
+  description: 'View-only OpenSCAD to STL converter',
 };
 
 export default function RootLayout({
@@ -14,11 +10,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <UserProvider>
-          <NavBar />
-          <main>{children}</main>
-        </UserProvider>
+      <body style={{ margin: 0, padding: 0, overflow: 'hidden' }}>
+        {children}
       </body>
     </html>
   );

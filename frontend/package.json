@@ -1,27 +1,23 @@
 {
-  "name": "mchacks-frontend",
+  "name": "openscad-stl-viewer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
-    "@auth0/nextjs-auth0": "^3.5.0",
-    "@react-three/fiber": "^8.15.12",
-    "@react-three/drei": "^9.92.7",
-    "three": "^0.160.0",
-    "next": "^14.2.25",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.171.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
-    "@types/three": "^0.160.0",
-    "typescript": "^5.3.3"
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "@types/three": "^0.171.0",
+    "typescript": "^5.7.2"
   }
 }
