@@ -1,14 +1,3 @@
-"""
-FastAPI backend for Gemini -> OpenSCAD -> STL pipeline.
-
-Flow:
-1. Receive natural language prompt
-2. Send to Gemini API to generate OpenSCAD code
-3. Write OpenSCAD code to temporary .scad file
-4. Run OpenSCAD CLI: openscad input.scad -o output.stl
-5. Return STL file as binary response + generated code
-"""
-
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,12 +9,10 @@ import google.generativeai as genai
 from typing import Optional
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# Allow frontend to call backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -34,7 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable is required. Create a .env file with GEMINI_API_KEY=your_key")
@@ -47,8 +33,8 @@ class PromptRequest(BaseModel):
     prompt: str
     current_code: Optional[str] = None
     current_stl_data: Optional[str] = None
-    mesh_transforms: Optional[dict] = None  # { position: {x,y,z}, scale: {x,y,z}, rotation: {x,y,z in degrees} }
-    component_transforms: Optional[list] = None  # [{ id, position, scale, rotation }, ...]
+    mesh_transforms: Optional[dict] = None
+    component_transforms: Optional[list] = None
 
 
 class GenerateResponse(BaseModel):
@@ -57,32 +43,22 @@ class GenerateResponse(BaseModel):
 
 
 def fix_common_syntax_errors(code: str) -> str:
-    """
-    Automatically fix common OpenSCAD syntax errors before compilation.
-    """
     import re
     import math
     
-    # Add PI definition if not present
     if 'PI' in code and 'PI =' not in code and 'PI=' not in code:
-        # Add PI definition at the top
         code = f"PI = {math.pi};\n\n" + code
     
     lines = code.split('\n')
     fixed_lines = []
     
     for line in lines:
-        # Skip lines that are actual module definitions
         if line.strip().startswith('module ') and '(' in line:
             fixed_lines.append(line)
             continue
         
-        # Replace 'module' parameter with 'mod' in various contexts
-        # But only if it's not already 'gear_module' or similar
         if 'gear_module' not in line and 'gear_mod' not in line:
-            # In parameter lists: module = value or module=value
             line = re.sub(r'\bmodule\s*=\s*', 'mod = ', line)
-            # In calculations: * module, / module, + module, - module
             line = re.sub(r'([*/+\-])\s*module\b', r'\1 mod', line)
             line = re.sub(r'\bmodule\s*([*/+\-])', r'mod \1', line)
         
@@ -92,11 +68,6 @@ def fix_common_syntax_errors(code: str) -> str:
 
 
 def compile_openscad(openscad_code: str) -> tuple[bytes, str, str]:
-    """
-    Compile OpenSCAD code to STL.
-    Returns (stl_data, fixed_code, error_message) - error_message is empty string if successful.
-    """
-    # Apply automatic fixes for common syntax errors
     fixed_code = fix_common_syntax_errors(openscad_code)
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.scad', delete=False) as scad_file:
@@ -110,7 +81,7 @@ def compile_openscad(openscad_code: str) -> tuple[bytes, str, str]:
             ['openscad', scad_path, '-o', stl_path],
             capture_output=True,
             text=True,
-            timeout=60  # Increased timeout for detailed models
+            timeout=60
         )
         
         if result.returncode != 0:
@@ -136,32 +107,15 @@ def compile_openscad(openscad_code: str) -> tuple[bytes, str, str]:
 
 @app.post("/generate")
 async def generate_from_prompt(request: PromptRequest):
-    """
-    Complete pipeline: Prompt -> Gemini -> OpenSCAD -> STL (with retry on errors)
-    
-    1. Send prompt to Gemini API
-    2. Extract OpenSCAD code from response
-    3. Try to compile with OpenSCAD
-    4. If compilation fails, send error back to Gemini to fix (up to 2 retries)
-    5. Return STL binary + generated code
-    
-    For incremental updates:
-    - If current_code is provided, treat as refinement (add/modify only what's mentioned)
-    - Preserve existing structure unless explicitly asked to change it
-    """
-    
     max_retries = 2
     is_refinement = hasattr(request, 'current_code') and request.current_code
     
     for attempt in range(max_retries + 1):
-        # Step 1: Generate OpenSCAD code using Gemini
         try:
             if attempt == 0:
                 if is_refinement:
-                    # Refinement mode - modify only what's mentioned
                     transforms_info = ""
                     
-                    # Use component_transforms if available (multiple parts), otherwise fall back to mesh_transforms
                     if hasattr(request, 'component_transforms') and request.component_transforms:
                         transforms_info = "EXISTING COMPONENTS:\n"
                         for idx, comp in enumerate(request.component_transforms):
@@ -227,7 +181,6 @@ SYNTAX RULES (CRITICAL):
 
 Refactored OpenSCAD code (with refinements applied):"""
                 else:
-                    # Initial generation
                     prompt_text = f"""You are an expert OpenSCAD programmer. Generate SIMPLE, working OpenSCAD code.
 
 USER REQUEST: {request.prompt}
@@ -253,7 +206,7 @@ FORBIDDEN SHAPES - NEVER USE:
 
 CRITICAL RULES - FOLLOW EXACTLY:
 
-1. ONLY BASIC PRIMITIVES AND SIMPLE EXTRUSIONS:W
+1. ONLY BASIC PRIMITIVES AND SIMPLE EXTRUSIONS:
    - Generate ONLY from: CUBES, SPHERES, CYLINDERS, TRIANGLES (via linear_extrude + polygon)
    - Combine them with translate(), rotate(), scale()
    - Use union() to combine shapes
@@ -279,7 +232,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 Example 1 - Simple Cube:
 $fn = 50;
-cube([20, 20, 20], center=true or false);
+cube([20, 20, 20], center=true);
 
 Example 2 - Sphere:
 $fn = 50;
@@ -291,7 +244,7 @@ cylinder(h=30, r=10, center=false);
 
 Example 4 - Multi-part assembly (cubes + sphere):
 $fn = 50;
-cube([30, 30, 30], center=true or false);
+cube([30, 30, 30], center=true);
 translate([50, 0, 0]) sphere(r=15);
 
 Example 5 - Triangular prism (triangle extruded):
@@ -301,10 +254,10 @@ linear_extrude(height=20)
 
 Example 6 - Difference (cube with hole):
 $fn = 50;
-difference() opening_brace
-  cube([40, 40, 40], center=true or false);
-  cylinder(h=50, r=8, center=true or false);
-closing_brace
+difference() {{
+  cube([40, 40, 40], center=true);
+  cylinder(h=50, r=8, center=true);
+}}
 
 RULES TO PREVENT ERRORS:
 1. Always use center=true or center=false explicitly
@@ -324,7 +277,6 @@ RULES TO PREVENT ERRORS:
 
 RETURN ONLY the OpenSCAD code. No markdown, no backticks, no explanations."""
             else:
-                # Retry with error feedback
                 refinement_note = " (refinement)" if is_refinement else ""
                 prompt_text = f"""The previous OpenSCAD code had a compilation error{refinement_note}. FIX IT NOW.
 
@@ -358,7 +310,6 @@ Return ONLY corrected OpenSCAD code, no explanations."""
             response = model.generate_content(prompt_text)
             openscad_code = response.text.strip()
             
-            # Clean up any markdown formatting if present
             if openscad_code.startswith("```"):
                 lines = openscad_code.split("\n")
                 openscad_code = "\n".join(lines[1:-1]) if len(lines) > 2 else openscad_code
@@ -370,26 +321,21 @@ Return ONLY corrected OpenSCAD code, no explanations."""
                 detail=f"Gemini API error: {str(e)}"
             )
         
-        # Step 2: Try to compile the code
         stl_data, fixed_code, compilation_error = compile_openscad(openscad_code)
         
         if stl_data:
-            # Success! Return the result with the fixed code
             import base64
             response_data = {
                 "stl_data": base64.b64encode(stl_data).decode('utf-8'),
-                "openscad_code": fixed_code  # Return the fixed code that actually compiled
+                "openscad_code": fixed_code
             }
             return response_data
         
-        # Update openscad_code with fixed version for next retry
         openscad_code = fixed_code
         
-        # Compilation failed - if we have retries left, loop again
         if attempt < max_retries:
             continue
         else:
-            # Out of retries, return error
             raise HTTPException(
                 status_code=400,
                 detail=f"OpenSCAD compilation failed after {max_retries + 1} attempts:\n{compilation_error}\n\nFinal generated code:\n{openscad_code}"
@@ -398,5 +344,4 @@ Return ONLY corrected OpenSCAD code, no explanations."""
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
     return {"status": "ok"}

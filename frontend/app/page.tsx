@@ -24,16 +24,13 @@ export default function Home() {
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [isDarkMode, setIsDarkMode] = useState(true);
 
-  // Initialize Three.js scene
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // Scene with dark navy blue background
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(isDarkMode ? 0x010409 : 0xf6f8fa);
     sceneRef.current = scene;
 
-    // Camera with extended far plane for infinite grid
     const camera = new THREE.PerspectiveCamera(
       75,
       canvasRef.current.clientWidth / canvasRef.current.clientHeight,
@@ -43,7 +40,6 @@ export default function Home() {
     camera.position.set(30, 30, 30);
     cameraRef.current = camera;
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
@@ -52,17 +48,15 @@ export default function Home() {
     canvasRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Orbit Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.autoRotate = false;  // Disable automatic rotation
-    controls.enableRotate = true;   // Enable user rotation
-    controls.enablePan = true;      // Enable user panning
-    controls.enableZoom = true;     // Enable user zoom
+    controls.autoRotate = false;
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
     controlsRef.current = controls;
 
-    // Lighting - improved for better appearance
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);  // Increased brightness
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -70,21 +64,17 @@ export default function Home() {
     directionalLight.castShadow = true;
     scene.add(directionalLight);
 
-    // Add fill light from opposite side for better definition
     const fillLight = new THREE.DirectionalLight(0x4499ff, 0.5);
     fillLight.position.set(-30, -20, -30);
     scene.add(fillLight);
 
-    // Infinite grid - much larger with more divisions
     const gridHelper = new THREE.GridHelper(5000, 500, isDarkMode ? 0x1e3a5f : 0xcccccc, isDarkMode ? 0x152238 : 0xeeeeee);
     gridHelper.position.y = 0;
     scene.add(gridHelper);
     
-    // Add large axis helper for reference (X=red, Y=green, Z=blue)
     const axisHelper = new THREE.AxesHelper(1000);
     scene.add(axisHelper);
 
-    // Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
@@ -92,7 +82,6 @@ export default function Home() {
     };
     animate();
 
-    // Handle window resize
     const handleResize = () => {
       if (!canvasRef.current) return;
       camera.aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
@@ -101,7 +90,6 @@ export default function Home() {
     };
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
@@ -109,7 +97,6 @@ export default function Home() {
     };
   }, [isDarkMode]);
 
-  // Generate 3D model from prompt
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError('Please enter a description');
@@ -121,10 +108,8 @@ export default function Home() {
     setGeneratedCode('');
 
     try {
-      // POST prompt to backend (Gemini -> OpenSCAD -> STL pipeline)
       const requestBody: any = { prompt: prompt };
       
-      // If we have a current model, send it for refinement
       if (currentStlData && generatedCode) {
         requestBody.current_stl_data = currentStlData;
         requestBody.current_code = generatedCode;
@@ -143,28 +128,22 @@ export default function Home() {
         throw new Error(errorText);
       }
 
-      // Receive response with STL data and generated OpenSCAD code
       const data = await response.json();
       
-      // Decode base64 STL data
       const stlBinary = Uint8Array.from(atob(data.stl_data), c => c.charCodeAt(0));
       
-      // Store generated OpenSCAD code and STL data
       setGeneratedCode(data.openscad_code);
       setCurrentStlData(data.stl_data);
 
-      // Clear previous mesh
       if (meshRef.current && sceneRef.current) {
         sceneRef.current.remove(meshRef.current);
         meshRef.current.geometry.dispose();
         (meshRef.current.material as THREE.Material).dispose();
       }
 
-      // Load STL into Three.js
       const loader = new STLLoader();
       const geometry = loader.parse(stlBinary.buffer);
 
-      // Center the geometry
       geometry.computeBoundingBox();
       if (geometry.boundingBox) {
         const center = new THREE.Vector3();
@@ -172,19 +151,16 @@ export default function Home() {
         geometry.translate(-center.x, -center.y, -center.z);
       }
 
-      // Create mesh with better material
       const material = new THREE.MeshStandardMaterial({
-        color: 0xa0a0a0,  // Neutral grey color
+        color: 0xa0a0a0,
         metalness: 0.2,
         roughness: 0.5,
-        flatShading: false,  // Smooth shading
+        flatShading: false,
       });
       const mesh = new THREE.Mesh(geometry, material);
       
-      // Compute normals for better lighting
       geometry.computeVertexNormals();
       
-      // Add edges for definition
       const edges = new THREE.EdgesGeometry(geometry);
       const wireframe = new THREE.LineSegments(
         edges,
@@ -194,12 +170,10 @@ export default function Home() {
       
       meshRef.current = mesh;
 
-      // Add to scene
       if (sceneRef.current) {
         sceneRef.current.add(mesh);
       }
 
-      // Fit camera to object
       if (sceneRef.current && cameraRef.current && controlsRef.current) {
         const box = new THREE.Box3().setFromObject(mesh);
         const size = box.getSize(new THREE.Vector3());
@@ -212,7 +186,6 @@ export default function Home() {
         controlsRef.current.update();
       }
 
-      // Clear prompt after successful generation
       setPrompt('');
 
     } catch (err) {
@@ -222,7 +195,6 @@ export default function Home() {
     }
   };
 
-  // Export STL file
   const handleExport = () => {
     if (!meshRef.current) {
       alert('No model to export');
@@ -242,7 +214,6 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  // Update position
   const updatePosition = (axis: 'x' | 'y' | 'z', value: number) => {
     const newPos = { ...position, [axis]: value };
     setPosition(newPos);
@@ -251,7 +222,6 @@ export default function Home() {
     }
   };
 
-  // Update scale
   const updateScale = (axis: 'x' | 'y' | 'z', value: number) => {
     const newScale = { ...scale, [axis]: Math.max(0.1, value) };
     setScale(newScale);
@@ -260,7 +230,6 @@ export default function Home() {
     }
   };
 
-  // Update rotation
   const updateRotation = (axis: 'x' | 'y' | 'z', value: number) => {
     const newRot = { ...rotation, [axis]: value };
     setRotation(newRot);
@@ -273,7 +242,6 @@ export default function Home() {
     }
   };
 
-  // Reset transforms
   const resetTransforms = () => {
     setPosition({ x: 0, y: 0, z: 0 });
     setScale({ x: 1, y: 1, z: 1 });
@@ -285,7 +253,6 @@ export default function Home() {
     }
   };
 
-  // Theme configuration
   const theme = isDarkMode ? {
     bgPrimary: '#010409',
     bgSecondary: '#0d1117',
@@ -322,13 +289,11 @@ export default function Home() {
       backgroundColor: theme.bgSecondary,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
     }}>
-      {/* Three.js canvas - left side */}
       <div
         ref={canvasRef}
         style={{ flex: 1, position: 'relative' }}
       />
 
-      {/* Control panel - right side */}
       <div style={{ 
         width: '380px',
         height: '100vh',
@@ -340,8 +305,6 @@ export default function Home() {
         boxShadow: isDarkMode ? '-2px 0 20px rgba(0, 0, 0, 0.5)' : '-2px 0 10px rgba(0, 0, 0, 0.1)'
       }}>
 
-
-        {/* Theme Toggle Button */}
         <div style={{
           padding: '12px 16px',
           borderBottom: `1px solid ${theme.border}`,
@@ -372,7 +335,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Scrollable content area */}
         <div style={{
           flex: 1,
           padding: '16px',
@@ -381,7 +343,6 @@ export default function Home() {
           flexDirection: 'column',
           gap: '10px'
         }}>
-          {/* Error display */}
           {error && (
             <div style={{
               padding: '10px 12px',
@@ -396,7 +357,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Generated code display */}
           {generatedCode && (
             <div style={{
               padding: '10px 12px',
@@ -442,7 +402,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Transform Controls */}
           {meshRef.current && (
             <div style={{
               padding: '10px 12px',
@@ -460,7 +419,6 @@ export default function Home() {
                 TRANSFORM
               </div>
 
-              {/* Position Controls */}
               <div style={{ marginBottom: '10px' }}>
                 <div style={{ color: theme.textMuted, fontSize: '10px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Position</div>
                 {(['x', 'y', 'z'] as const).map(axis => (
@@ -494,7 +452,6 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Scale Controls */}
               <div style={{ marginBottom: '10px' }}>
                 <div style={{ color: theme.textMuted, fontSize: '10px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Scale</div>
                 {(['x', 'y', 'z'] as const).map(axis => (
@@ -528,7 +485,6 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Rotation Controls */}
               <div style={{ marginBottom: '10px' }}>
                 <div style={{ color: theme.textMuted, fontSize: '10px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rotation</div>
                 {(['x', 'y', 'z'] as const).map(axis => (
@@ -562,7 +518,6 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Reset Button */}
               <button
                 onClick={resetTransforms}
                 style={{
@@ -593,7 +548,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Input area */}
         <div style={{ 
           padding: '16px',
           borderTop: `1px solid ${theme.border}`,
