@@ -9,4 +9,4 @@ The application uses Google's Gemini API to convert text descriptions into OpenS
 - **Backend**: FastAPI (Python)
 - **Frontend**: Next.js with Three.js
 - **AI**: Google Gemini API
-- **3D**: OpenSCAD for model generationt 
+- **3D**: OpenSCAD for model generationt t
